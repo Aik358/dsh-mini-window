@@ -1,0 +1,21 @@
+{
+  "name": "dsh-mini-window",
+  "version": "0.1.1",
+  "private": false,
+  "description": "[MOVED] This package has moved to @a9i5k4/dsh-mini-window. 本包已迁移至 @a9i5k4/dsh-mini-window。",
+  "deprecated": "Moved to @a9i5k4/dsh-mini-window — please install that instead. 已迁移至 @a9i5k4/dsh-mini-window。",
+  "license": "MIT",
+  "author": "Aik358",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Aik358/dsh-mini-window.git"
+  },
+  "homepage": "https://www.npmjs.com/package/@a9i5k4/dsh-mini-window",
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "plugin",
+    "mini-window",
+    "moved"
+  ]
+}
