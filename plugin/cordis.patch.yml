@@ -1,0 +1,8 @@
+# dsh-mini-window 插件的 Host 侧挂载声明。
+#
+# 本文件只声明**本插件自身**的 host 侧条目，不修改任何既有 bundle 的行为。
+# profile 通过 package.json 的 `dsh.bundle.patch` 指向本文件。
+
+- insert:
+    - id: mini-window
+      name: dsh-mini-window

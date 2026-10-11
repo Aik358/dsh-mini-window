@@ -1,0 +1,56 @@
+{
+  "name": "dsh-mini-window",
+  "version": "0.1.0",
+  "private": false,
+  "description": "DSH 小窗模式：?dsh-mini=1 触发的紧凑单栏对话视图，另附可选的独立小窗进程（悬浮球 + 无边框浮窗）。",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./mini-spec": "./lib/mini-spec.cjs",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-slots",
+        "@deepseek-ai/dsh-client-ui-layout",
+        "@deepseek-ai/dsh-client-ui-renderer"
+      ],
+      "platform": "web"
+    }
+  },
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "plugin",
+    "mini-window",
+    "compact",
+    "client-plugin"
+  ],
+  "author": "Aik358",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Aik358/dsh-mini-window.git"
+  },
+  "homepage": "https://github.com/Aik358/dsh-mini-window#readme",
+  "bugs": {
+    "url": "https://github.com/Aik358/dsh-mini-window/issues"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1"
+  }
+}

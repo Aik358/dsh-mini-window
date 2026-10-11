@@ -1,0 +1,24 @@
+# ---- 依赖与构建产物 ----
+node_modules/
+*.log
+.pnpm-store/
+
+# ---- 本地凭据（★ 绝不入库）----
+.credentials.yaml
+.testhome/
+.npmrc
+*.pem
+*.key
+
+# ---- 本机验收取证与探针（不进发布仓库）----
+# 说明：这些是**开发期在本机**做的 UI 实测与回归工具，依赖本机 DSH 宿主与截图，
+#       对外部使用者既无意义、也不宜随仓库分发。需要时保留在本地即可。
+evidence/
+probe/
+
+# ---- 编辑器/系统 ----
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
+.DS_Store

@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta http-equiv="Content-Security-Policy"
+      content="default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; script-src 'self'; frame-src http://127.0.0.1:* http://localhost:*" />
+<title>DSH 小窗</title>
+<style>
+  /* =========================================================================
+     参考小窗复刻 —— 外层几何（全部取自逐像素实测，见 docs/06 与 batch10 取证）
+     -------------------------------------------------------------------------
+       窗口客户区        520 × 720   （参考实现实测客户区尺寸，非外框）
+       画布底色          #000000     （实测：无阴影渐变，边缘行/列采样全 0）
+       内容卡片          400 × 600 @ (60,30)   留白 左右各 60 / 上 30 / 下 90
+       顶栏              55px，底部 1px #313131 分隔线
+       卡片圆角          12px（设计值）
+
+     ⚠️ 几何必须用 `useContentSize: true`（见 main.js）。实测：不加该选项时
+        `BrowserWindow({width:460,height:720})` 的实际客户区只有 444×655
+        （少 16×65），这正是此前「上下留白不对称、卡片像被压扁」的根因。
+     ========================================================================= */
+  :root {
+    /* ★ 2026-10-11 修正：画布**不是**黑色，而是**全透明**。
+       参考小窗 = 「400×600 卡片居中放在 520×720 的无边框**透明**窗口里」，
+       截图里看到的黑色是**透明区与背景合成后的结果**（docs/06 原文：
+       「窗口画布（透明区被合成后的底色）#000000」）。
+       我早期把"合成的黑"误读成"要涂的黑"，于是窗口外围成了一块黑胶布。
+       现在外围真正透出桌面 ⇒ 这里必须是 transparent。 */
+    --canvas: transparent;
+    --panel: #1A1A1A;           /* 实测 rgb(26,26,26) */
+    --composer: #232528;        /* 实测 rgb(35,37,40) */
+    --divider: #313131;         /* 实测 rgb(49,49,49) */
+    --fg: #DDDDDD;              /* 主图标/文字 ~#DDDDDD–#F6F6F6 */
+    --dim: #717173;             /* 占位符 ~#717173 */
+    --hover: rgba(255,255,255,.09);
+    --active: rgba(255,255,255,.16);   /* ★ 激活态底色 */
+
+    --card-y: 0px;             /* ★ 卡片铺满整窗 ⇒ 无上留白（用户明确选择） */
+    /* ★★ 2026-10-11 用户裁定：**卡片铺满整个窗格**。
+       原设计照搬参考实现「400×600 卡片居中放在 520×720 窗口里」，留白 左右60/上30/下90。
+       但那圈留白带来一串副作用（用户实测逐条反馈）：
+         · 与卡片边框不重合的缩放热区；
+         · "挪到哪哪就亮一大块"（整圈热区 hover 高亮）；
+         · 透明圈吃掉桌面点击，需要穿透机制；
+         · 驱动了 `transparent:true`，而透明窗在 Windows 上**无法用系统边框缩放**，
+           只能自绘 8 个把手 —— 又引出上面全部问题。
+       用户原话：「能不能把这个窗口的默认值直接铺满整个窗格啊？这样至少就不用做
+       这么多奇怪的动作了，还更方便、更简单一点」。
+       ⇒ 铺满：卡片 = 100%（= `--card-w/h`），留白归零，上面那串机制**整条消失**。
+       代价（须知晓）：不再是参考实现那种"浮在透明窗口里的卡片"外观；
+                     窗口变为不透明矩形，由系统提供边框与阴影。 */
+    --card-w: 100%;
+    --card-h: 100%;
+    --topbar-h: 55px;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    height: 100%; width: 100%; overflow: hidden;
+    /* ★ 必须 transparent：窗口已是 `transparent:true`，页面再画黑底就等于没改 */
+    background: transparent; color: var(--fg);
+    font: 13px/1.45 system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+    user-select: none;
+  }
+
+  /* webview 铺满整窗。
+     ★ 2026-10-11：窗口改成 `transparent:true` 后，这里**不能**再有背景色，
+       否则黑底只是从"窗口"搬到"页面"，用户看到的仍是黑胶布。
+       #stage 留透明，让卡片外的区域真正透出桌面。 */
+  #stage { position: absolute; inset: 0; background: transparent; }
+  webview { width: 100%; height: 100%; display: flex; background: transparent; }
+
+  /* ---- 顶栏：**跟着卡片走**，不是固定在窗口坐标上 --------------------------
+     ★ 2026-10-11 修复「顶栏与卡片脱节」（用户实测反馈）。
+     此前用 `left:60px; width:400px` 写死窗口坐标 —— 那只在窗口恰好 520 宽时对齐；
+     而卡片是 `margin:auto` **水平居中**，窗口一改宽度两者就分家（拉伸窗口即露馅）。
+
+     ⚠️ **纵向也必须对齐**：卡片上边距是 30px（参考实现实测上留白 30），
+        顶栏若写 `top:0` 就会浮在窗口最顶部、与卡片上门沿差 30px
+        —— 这正是验收实测抓到的 `顶栏 y=0 而卡片 y=30`。
+        故顶栏 `top` 与卡片上边距**用同一个变量**，两者永远咬合。 */
+  #topbar {
+    position: absolute;
+    left: 0; right: 0; top: 0;
+    height: var(--topbar-h);
+    background: var(--panel);
+    /* 铺满后窗口不再有透明留白 ⇒ 圆角交给**窗口本身**（系统绘制），
+       顶栏不再需要自己画圆角（否则会在系统圆角内侧再画一圈，视觉重复）。 */
+    border-bottom: 1px solid var(--divider);
+    z-index: 10;
+    user-select: none;
+    -webkit-app-region: drag;          /* ★ 顶栏作为标题栏：由系统负责拖动 */
+  }
+  /* 顶栏内的按钮必须显式排除，否则系统会把点击当成"拖动标题栏"而吞掉 */
+  #topbar button, #topbar #status { -webkit-app-region: no-drag; }
+
+  /* ---- 边缘修饰（★ 用户要求：「边缘确实该加一些阴影一类的修饰但是不要影响主体」）----
+     设计取舍：**只做"分界"，不做"覆盖"**。
+
+       · 顶栏下方一条**渐隐**（`linear-gradient`）：从顶栏底色渐到透明，
+         制造"顶栏浮在内容之上"的层次，**不改变任何内容的明暗或位置**；
+       · `pointer-events: none` ⇒ **绝不拦截交互**（历史教训：任何覆盖层都要能穿透点击）；
+       · 只有 10px 高、且完全落在顶栏下沿之外 ⇒ 不侵占内容可读区。
+
+     **刻意不做**的事（都是"会影响主体"的做法）：
+       · 不给整个窗口加内阴影 / 边框光晕 —— 那会压暗四周、降低正文可读性；
+       · 不再自绘 `#stage::after` 全窗阴影 —— 批次12 曾这么做，铺满后与系统阴影叠成双层暗边。
+
+     窗口外缘的投影由**系统**提供（`main.js` 的 `hasShadow: true`），无需自绘。 */
+  #topbar::after {
+    content: '';
+    position: absolute;
+    left: 0; right: 0;
+    top: 100%;                       /* 紧贴顶栏下沿，不覆盖顶栏本身 */
+    height: 10px;
+    pointer-events: none;            /* ★ 绝不拦截交互 */
+    background: linear-gradient(to bottom, rgba(0,0,0,.28), rgba(0,0,0,0));
+  }
+  /* 图标中心严格使用参考实现实测值（卡内相对坐标），便于后续逐像素比对：
+       T1 最小化 24.5 / T2 置顶 58.5 / T3 左栏 92.5 / T4 模型名 左缘 172
+       T7 浮窗 306.5 / T8 更多 340.5 / T9 右栏 374.5
+     按钮 28×28 ⇒ left = 中心 - 14；垂直居中 top = (55-28)/2 = 13.5 */
+  .tb {
+    position: absolute; top: 13.5px;
+    width: 28px; height: 28px;
+    display: grid; place-items: center;
+    border: 0; background: transparent; color: var(--fg);
+    border-radius: 7px; cursor: pointer; opacity: .82;
+    transition: background 120ms ease, opacity 120ms ease, color 120ms ease;
+    -webkit-app-region: no-drag;
+  }
+  .tb:hover { background: var(--hover); opacity: 1; }
+  /* ★ 激活态**可见高亮**（用户实测反馈：「按下去之后激活和未激活没有高亮区分」）。
+     三重视觉信号：底色 + 更亮的字色 + 一道内描边。
+     用 `.active` 与 `[aria-pressed="true"]` 两种写法都认，避免只改 JS 漏改样式。 */
+  .tb.active,
+  .tb[aria-pressed="true"] {
+    background: var(--active);
+    color: #FFFFFF;
+    opacity: 1;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.22);
+  }
+  .tb.active:hover,
+  .tb[aria-pressed="true"]:hover { background: rgba(255,255,255,.22); }
+  .tb svg { width: 16px; height: 16px; fill: none; stroke: currentColor;
+            stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+  .tb[hidden] { display: none; }
+
+  #t1 { left: 10.5px; }
+  #t2 { left: 44.5px; }
+  #t3 { left: 78.5px; }
+  #t7 { left: 292.5px; }
+  #t8 { left: 326.5px; }
+  #t9 { left: 360.5px; }
+
+  /* T4：模型名。参考实现实测 文字高 11px、左缘 x=172 */
+  #t4 {
+    position: absolute; left: 172px; top: 0; height: var(--topbar-h);
+    display: flex; align-items: center; gap: 3px;
+    max-width: 118px;                /* 到 T7 之前留白，避免与右侧组重叠 */
+    font-size: 11px; line-height: 1; color: var(--fg);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    background: transparent; border: 0; cursor: pointer; padding: 0;
+    -webkit-app-region: no-drag;
+  }
+  #t4 svg { width: 10px; height: 10px; flex: none; opacity: .75; }
+  #t4[hidden] { display: none; }
+
+  /* 握手失败才出现的状态点（参考实现顶栏无此元素，故正常态不渲染） */
+  #status { position: absolute; left: 374.5px; top: 24px; width: 7px; height: 7px;
+            border-radius: 50%; background: #f0a020; display: none; }
+  #status.show { display: block; }
+  #status.ok { background: #2ec27e; }
+
+  /* ---- 兜底遮罩：握手失败时覆盖卡片，给出可操作提示 */
+  #gate {
+    position: absolute;
+    left: 50%; transform: translateX(-50%);
+    top: 30px;
+    width: var(--card-w); height: var(--card-h);
+    display: none; flex-direction: column; align-items: center; justify-content: center;
+    gap: 14px; padding: 28px; text-align: center;
+    background: var(--panel); border-radius: 12px; z-index: 20;
+  }
+  #gate.show { display: flex; }
+  #gate h2 { font-size: 14px; font-weight: 600; color: #F6F6F6; }
+  #gate p { font-size: 12px; color: var(--dim); max-width: 300px; line-height: 1.6; }
+  #gate button {
+    padding: 8px 16px; border-radius: 8px; cursor: pointer;
+    border: 1px solid var(--divider); background: var(--fg); color: #111;
+    font-size: 12px; font-weight: 600;
+  }
+  #gate button:hover { opacity: .88; }
+  #gate .hint { font-size: 11px; color: var(--dim); opacity: .8; }
+
+  /* （原 `#edges` 与 8 个 `.rz-*` 缩放把手已**整块移除**）
+     ────────────────────────────────────────────────────────────────
+     为什么能删（用户裁定「铺满整个窗格」之后的直接结果）：
+
+       那 8 个把手是为**透明窗口**打的补丁。Electron 在 Windows 上，
+       透明无边框窗口（`transparent:true`）**无法使用系统边框缩放**，
+       只能自绘热区 —— 于是引出后续全部麻烦：
+         把手的 hover 高亮 ⇒ 用户看到「挪到哪哪就亮一大块」；
+         把手要靠 `insideInteractiveZone` 与穿透逻辑对齐 ⇒ 两者几何一旦不一致，
+         点击就被穿透吃掉（"得找一段空白才能拖"）；拖动中滑进透明圈还会丢
+         `pointerup`（"粘手"）。
+
+       铺满之后：窗口 = 卡片，**没有透明留白** ⇒ 窗口改回**不透明**
+       （`transparent:false`），系统自动提供可拖的边框与阴影。
+       上面那一整条机制链**连同它的全部缺陷一起消失**。
+       ⇒ 这比"把热区做大一点/对齐一点"更根本：**删掉问题本身，而不是修补它**。
+
+     用户明确说「还更方便、更简单一点」—— 这里照做：净删机制。 */
+
+
+  /* T8「更多」的本地菜单 */
+  #menu {
+    position: absolute; left: 50%; transform: translateX(-50%);
+    top: 88px;
+    min-width: 208px; display: none; flex-direction: column;
+    padding: 5px; z-index: 30;
+    background: #2A2A2C; border: 1px solid var(--divider); border-radius: 10px;
+    box-shadow: 0 12px 40px rgba(0,0,0,.45);
+  }
+  #menu.show { display: flex; }
+  #menu button {
+    display: flex; align-items: center; gap: 8px;
+    padding: 7px 9px; border: 0; border-radius: 7px;
+    background: transparent; color: var(--fg);
+    font-size: 12px; text-align: left; cursor: pointer;
+  }
+  #menu button:hover { background: var(--hover); }
+  #menu button svg { width: 14px; height: 14px; flex: none; fill: none;
+                     stroke: currentColor; stroke-width: 1.6;
+                     stroke-linecap: round; stroke-linejoin: round; }
+  #menu .sep { height: 1px; margin: 5px 4px; background: var(--divider); }
+  #menu .row {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 10px; padding: 6px 9px; font-size: 12px; color: var(--fg);
+  }
+  /* ★ 字号设置（用户反馈「字体还有点大，不知道有没有设置的地方」） */
+  #menu .steps { display: flex; align-items: center; gap: 4px; }
+  #menu .steps button {
+    width: 24px; height: 24px; padding: 0; justify-content: center;
+    border: 1px solid var(--divider); border-radius: 6px;
+    font-size: 14px; line-height: 1;
+  }
+  #menu .steps button:disabled { opacity: .35; cursor: not-allowed; }
+  #menu .val { min-width: 40px; text-align: center; font-variant-numeric: tabular-nums; color: var(--dim); }
+</style>
+</head>
+<body>
+  <div id="stage">
+    <!-- 刻意不开 allowpopups / disablewebsecurity：
+         前者会让页面弹窗变成真 BrowserWindow（安全面扩大），
+         后者等于关掉同源策略。本场景都不需要。
+         preload 与 src 都由 panel.js 在**首次导航之前**设置：
+         webview 的 preload 必须是 file:// 绝对 URL（相对路径不可靠），
+         且必须在 src 之前设好，否则首次导航就用不上。 -->
+    <webview id="view" partition="persist:dsh-companion"></webview>
+  </div>
+
+  <!-- 顶栏（T1–T4 / T7–T9；T5/T6 语音类为参考实现专属，DSH 不映射，见 docs/06 §5.1）
+       ★ 图标一律用 16×16 视图框（1 单位 = 1 渲染像素），并按参考实现实测簇宽设计：
+         T1 14 宽 / T2 12 宽 / T3 16 / T7 16 / T8 15 / T9 16
+       判据来源：probe/pixel-diff-batch10.cjs 的顶栏亮簇对比（逐像素扫描列亮像素）。 -->
+  <div id="topbar">
+    <button class="tb" id="t1" title="最小化">
+      <svg viewBox="0 0 16 16"><path d="M1 8h14"/></svg>
+    </button>
+    <button class="tb active" id="t2" title="已置顶（点击取消）" aria-pressed="true">
+      <svg viewBox="0 0 16 16"><path d="M5 2h6l-1 4.5L14 9.5v1H2v-1l4-3L5 2z"/><path d="M8 10.5V15.5"/></svg>
+    </button>
+    <button class="tb" id="t3" title="打开侧栏" aria-pressed="false">
+      <svg viewBox="0 0 16 16"><rect x="0.8" y="1.5" width="14.4" height="13" rx="2.5"/><path d="M10.5 1.5v13"/></svg>
+    </button>
+    <button id="t4" hidden title="模型">
+      <span id="t4-label">—</span>
+      <svg viewBox="0 0 16 16"><path d="M6 3l5 5-5 5"/></svg>
+    </button>
+    <button class="tb" id="t7" title="紧凑浮窗" aria-pressed="false">
+      <svg viewBox="0 0 16 16"><rect x="0.8" y="1.5" width="14.4" height="13" rx="2.5"/><rect x="8" y="7.5" width="6" height="5.5" rx="1"/><path d="M3.5 7.5l3-3M3.5 4.5h3v3"/></svg>
+    </button>
+    <button class="tb" id="t8" title="更多" aria-pressed="false">
+      <svg viewBox="0 0 16 16"><circle cx="2" cy="5" r="2.2" style="fill:currentColor;stroke:none"/><circle cx="2" cy="11" r="2.2" style="fill:currentColor;stroke:none"/><path d="M6.2 5h8.8M6.2 11h8.8"/></svg>
+    </button>
+    <button class="tb" id="t9" title="打开侧边工作台" hidden>
+      <svg viewBox="0 0 16 16"><rect x="0.8" y="1.5" width="14.4" height="13" rx="2.5"/><path d="M5.5 1.5v13"/></svg>
+    </button>
+    <span id="status" title="连接状态"></span>
+  </div>
+
+  <div id="menu">
+    <!-- ★ 字号设置（用户反馈「字体还有点大，不知道有没有设置的地方」）。
+         缩放走 webview 的 zoomFactor（真缩放 guest 整页），
+         不是改 CSS 字号 —— 后者会破坏 DSH 自己的排版。 -->
+    <div class="row">
+      <span>界面缩放</span>
+      <span class="steps">
+        <button id="zoom-out" title="缩小">−</button>
+        <span class="val" id="zoom-val">100%</span>
+        <button id="zoom-in" title="放大">＋</button>
+      </span>
+    </div>
+    <div class="sep"></div>
+    <button id="m-reload">
+      <svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-1.6 5"/><path d="M20 4v6h-6"/></svg>重新加载
+    </button>
+    <button id="m-main">
+      <svg viewBox="0 0 24 24"><path d="M14 4h6v6"/><path d="M20 4l-8 8"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>回到 DSH 主界面
+    </button>
+    <button id="m-close">
+      <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>关闭小窗
+    </button>
+  </div>
+
+  <!-- （原 8 个 `.rz-*` 自绘缩放把手已移除：铺满方案下窗口不透明，系统提供边框缩放。） -->
+
+  <div id="gate">
+    <h2>尚未与 DSH 握手</h2>
+    <p>小窗是<b>独立进程</b>，需要一次性授权才能读取 DSH 界面。点击下面的按钮重试；若仍失败，请在 DSH 里打开一次小窗面板。</p>
+    <button id="retry">重试握手</button>
+    <div class="hint" id="gate-info"></div>
+  </div>
+
+  <script src="panel.js"></script>
+</body>
+</html>
