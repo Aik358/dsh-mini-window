@@ -9,8 +9,8 @@
  *   - profile 通过 package.json 的 `dsh.bundle.patch` 指向本包的 cordis.patch.yml
  */
 
-/** Host 侧不依赖任何服务即可加载（批次 0 保持零 inject，避免因缺服务永久 pending）。 */
-export const name = 'dsh-mini-window';
+/** Host 侧不依赖任何服务即可加载（保持零 inject，避免因缺服务永久 pending）。 */
+export const name = '@a9i5k4/dsh-mini-window';
 
 export function apply(ctx) {
   ctx.logger?.info?.('[dsh-mini-window] host 侧已加载');

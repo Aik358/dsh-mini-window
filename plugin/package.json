@@ -1,8 +1,8 @@
 {
-  "name": "dsh-mini-window",
+  "name": "@a9i5k4/dsh-mini-window",
   "version": "0.1.0",
   "private": false,
-  "description": "DSH 小窗模式：?dsh-mini=1 触发的紧凑单栏对话视图，另附可选的独立小窗进程（悬浮球 + 无边框浮窗）。",
+  "description": "DSH mini window: a compact single-column conversation view triggered by ?dsh-mini=1, plus an optional standalone mini-window process (floating ball + frameless window).",
   "type": "module",
   "main": "lib/index.js",
   "exports": {
@@ -49,6 +49,9 @@
   "homepage": "https://github.com/Aik358/dsh-mini-window#readme",
   "bugs": {
     "url": "https://github.com/Aik358/dsh-mini-window/issues"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.1"

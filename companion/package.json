@@ -2,7 +2,7 @@
   "name": "dsh-companion",
   "version": "1.0.0",
   "private": true,
-  "description": "dsh-mini-window 的可选独立小窗进程（悬浮球 + 无边框浮窗）",
+  "description": "@a9i5k4/dsh-mini-window 的可选独立小窗进程（悬浮球 + 无边框浮窗）",
   "main": "main.js",
   "scripts": {
     "start": "electron .",

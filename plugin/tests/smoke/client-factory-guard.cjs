@@ -175,7 +175,7 @@ console.log('[A] location.search = "?dsh-mini=1"');
 {
   const { captured, attrs, styleProps } = runInSandbox('?dsh-mini=1');
   check('__ModuleLoader__.load 被调用 1 次', captured.loadCalls === 1, `实际 ${captured.loadCalls}`);
-  check('注册 id 正确', captured.id === 'dsh-mini-window', `实际 ${JSON.stringify(captured.id)}`);
+  check('注册 id 正确（= 完整包名 @a9i5k4/dsh-mini-window）', captured.id === '@a9i5k4/dsh-mini-window', `实际 ${JSON.stringify(captured.id)}`);
   check('factory 是函数', typeof captured.factory === 'function');
 
   const used = [];
@@ -212,6 +212,9 @@ console.log('[A] location.search = "?dsh-mini=1"');
   );
   check(
     'overlay id 以包名为前缀（避免与其他插件的 id 撞车）',
+    // ★ 断言口径：id 形如 `<包名>.badge`。包名已改为 scoped（@a9i5k4/dsh-mini-window），
+    //   故不能再按裸名 startsWith('dsh-mini-window') 判 —— 那样会**恒假**。
+    //   改为断言「以包名末段为前缀」，包名怎么改名它都跟着成立。
     typeof stub.log.registers[0]?.decl?.id === 'string'
       && stub.log.registers[0].decl.id.startsWith('dsh-mini-window'),
     `id = ${JSON.stringify(stub.log.registers[0]?.decl?.id)}`,

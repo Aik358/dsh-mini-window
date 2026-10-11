@@ -29,11 +29,11 @@ if (process.env.ELECTRON_RUN_AS_NODE && !process.versions.electron) {
     '因此拿不到 app / BrowserWindow 等 Electron API。',
     '',
     '修复：用自带的启动器（它会先清掉该变量）：',
-    '    powershell -ExecutionPolicy Bypass -File E:\\dsh-mini-window-lab\\companion\\start.ps1',
+    '    powershell -ExecutionPolicy Bypass -File <本目录>\\start.ps1',
     '',
     '或手动清除后启动：',
     '    Remove-Item Env:\\ELECTRON_RUN_AS_NODE',
-    `    & "E:\\dsh-mini-window-lab\\companion\\node_modules\\electron\\dist\\electron.exe" E:\\dsh-mini-window-lab\\companion`,
+    '    & "<本目录>\\node_modules\\electron\\dist\\electron.exe" <本目录>',
     '',
   ].join('\n'));
   process.exit(78); // EX_CONFIG

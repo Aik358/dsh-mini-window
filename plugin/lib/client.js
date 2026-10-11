@@ -39,7 +39,10 @@
  */
 
 window.__ModuleLoader__.load({
-	id: 'dsh-mini-window',
+	// ★ 运行时 id = **完整包名**（与 @a9i5k4/dsh-auto-memory 同一口径）。
+	//   它同时是 profile roster 的依赖键与浏览器侧注册 id，三处必须一致：
+	//     package.json 的 name / client.js 的 id / cordis.patch.yml 的 name。
+	id: '@a9i5k4/dsh-mini-window',
 	factory: (require) => {
 		var module = { exports: {} };
 		var exports = module.exports;
