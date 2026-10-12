@@ -19,41 +19,63 @@
     background: transparent !important;
     overflow: hidden;
   }
-  body { display: grid; place-items: center; user-select: none; -webkit-user-select: none; }
+  /* ★ 命中区修正（2026-10-11）：原来 `#ball` 只有 36px 而窗口 44px，
+   *   四周各 4px 是 alpha=0 的透明边 —— 鼠标落在那里会**穿透到桌面**，
+   *   表现为「球明明在，但边缘拖不动/点不动」。
+   *   现在让 `#ball` 撑满整个窗口（44px），视觉球体靠 `::after` 画 36px 圆，
+   *   于是**整窗都是命中区**，不再有"差几像素就点不到"的问题。 */
+  body { display: block; user-select: none; -webkit-user-select: none; }
 
   #ball {
-    width: var(--ball); height: var(--ball);
+    width: var(--win); height: var(--win);       /* 命中区 = 整窗 */
     border-radius: 50%;
     display: grid; place-items: center;
     cursor: grab;
     position: relative;
-    /* 关键：默认近乎全透明，只在悬停时浮出极淡的底，避免"黑块"观感 */
-    background: transparent;
-    border: 1px solid transparent;
-    transition: transform 160ms cubic-bezier(.2,.8,.2,1),
-                background 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
-    will-change: transform;
+    background: transparent;                      /* 由 ::after 负责视觉 */
+    border: none;
   }
-  body:hover #ball {
-    background: rgba(255, 255, 255, 0.10);
-    border-color: rgba(255, 255, 255, 0.16);
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28);
+  /* 视觉球体：36px 圆形，居中 */
+  #ball::after {
+    content: '';
+    position: absolute;
+    width: var(--ball); height: var(--ball);
+    border-radius: 50%;
+    background: rgba(28, 30, 33, 0.82);
+    border: 1px solid rgba(255, 255, 255, 0.20);
+    box-shadow: 0 3px 12px rgba(0, 0, 0, 0.42);
+    transition: background 160ms ease, border-color 160ms ease,
+                box-shadow 160ms ease, transform 160ms cubic-bezier(.2,.8,.2,1);
+    pointer-events: none;
+  }
+  #ball:hover::after {
+    background: rgba(42, 45, 49, 0.95);
+    border-color: rgba(255, 255, 255, 0.34);
+    box-shadow: 0 5px 18px rgba(0, 0, 0, 0.5);
     transform: scale(1.06);
   }
-  @media (prefers-color-scheme: light) {
-    body:hover #ball {
-      background: rgba(0, 0, 0, 0.07);
-      border-color: rgba(0, 0, 0, 0.12);
-      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.14);
-    }
-  }
-  #ball.dragging {
-    cursor: grabbing;
+  #ball.dragging::after {
     transform: scale(0.94);
+    background: rgba(58, 62, 68, 0.96);
+    border-color: rgba(255, 255, 255, 0.42);
     transition: none;
-    background: rgba(255, 255, 255, 0.14);
   }
   #ball:active { cursor: grabbing; }
+  @media (prefers-color-scheme: light) {
+    #ball::after {
+      background: rgba(250, 250, 252, 0.88);
+      border-color: rgba(0, 0, 0, 0.18);
+      box-shadow: 0 3px 12px rgba(0, 0, 0, 0.18);
+    }
+    #ball:hover::after {
+      background: rgba(255, 255, 255, 0.98);
+      border-color: rgba(0, 0, 0, 0.28);
+      box-shadow: 0 5px 18px rgba(0, 0, 0, 0.22);
+    }
+  }
+
+  /* logo 必须在 ::after 之上 */
+  #logo { position: relative; z-index: 1; }
 
   /* 拖动手感：整个窗口都是热区，但只有球体可见 */
   body { cursor: grab; }
